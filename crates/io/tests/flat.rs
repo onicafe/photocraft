@@ -466,13 +466,15 @@ fn gif_frames(frames: usize) -> Vec<u8> {
     b
 }
 
-/// #523: an animation opens its first frame, unchanged, with a warning that the rest was left out.
+/// Animated GIFs import every frame as a layer and initialize the document timeline.
 #[test]
-fn animation_imports_the_first_frame_with_a_warning() {
+fn animation_imports_all_frames_with_timeline() {
     let one = import("a.gif", &gif_frames(1)).unwrap();
     assert_eq!(one.warnings, Vec::<String>::new());
     let three = import("a.gif", &gif_frames(3)).unwrap();
-    assert_eq!(three.warnings, ["only the first of 3 frames was imported"]);
+    assert_eq!(three.warnings, Vec::<String>::new());
+    assert_eq!(three.document.layers.len(), 3);
+    assert_eq!(three.document.timeline.as_ref().map(|t| t.duration), Some(3));
     pixels_eq(&one.document, &three.document, 0.0);
 }
 

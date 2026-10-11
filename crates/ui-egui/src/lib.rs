@@ -1009,6 +1009,9 @@ impl PhotocraftApp {
         let (_, color) = self.session.open_document(doc, None);
         if let Some(st) = self.session.active_mut() {
             st.source_read_only = photocraft_io::affinity::is_affinity(bytes);
+            if st.doc.timeline.is_some() {
+                self.ui.timeline.open = true;
+            }
         }
         self.sync_views();
         self.ui.status = format!("Opened {name}");

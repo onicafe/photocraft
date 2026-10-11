@@ -425,7 +425,7 @@ async fn open_reports_decode_warnings() {
     let warnings = async |path: &str| json_of(&call(&client, "doc_open", json!({"path": path})).await)["warnings"].clone();
     assert_eq!(warnings("whole.jpg").await, json!([]));
     assert_eq!(warnings("cut.jpg").await, json!(["JPEG data ends early (the file is truncated or damaged); part of the image is missing"]));
-    assert_eq!(warnings("anim.gif").await, json!(["only the first of 2 frames was imported"]));
+    assert_eq!(warnings("anim.gif").await, json!([]));
     client.cancel().await.unwrap();
     cleanup(&dir);
 }

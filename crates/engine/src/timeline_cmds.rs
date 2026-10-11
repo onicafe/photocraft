@@ -38,6 +38,14 @@ fn with_timeline(s: &mut Session, f: impl FnOnce(&mut Option<Timeline>)) -> Resu
         t.clamp();
     }
     crate::video_cmds::sync(&mut doc);
+    if !doc.layers.iter().any(|l| l.video.is_some())
+        && doc.layers.iter().filter(|l| l.name.starts_with("Frame ")).count() > 1
+        && let Some(vis) = doc.layers.iter().find(|l| l.name.starts_with("Frame ") && l.visible).map(|l| l.id)
+    {
+        st.active_layer = Some(vis);
+        st.selected_layers = vec![vis];
+        st.layer_anchor = Some(vis);
+    }
     st.doc = Arc::new(doc);
     st.revision += 1;
     info(s)

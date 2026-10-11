@@ -49,6 +49,7 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
     let mut act: Option<(&str, Value)> = None;
     let mut close = false;
     let mut toggle_play = false;
+    let mut stop_play = false;
     let playing = app.ui.timeline.playing;
     let t = Tokens::get(ctx);
 
@@ -84,7 +85,15 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
                     if crate::icons::button(ui, play_icon, 22.0, playing, if playing { tl!("Pause") } else { tl!("Play") }).clicked() {
                         toggle_play = true;
                     }
+                    let stop_btn = crate::icons::button(ui, "square", 22.0, false, tl!("Stop"));
+                    if stop_btn.clicked() || (playing && stop_btn.is_pointer_button_down_on()) {
+                        if !playing {
+                            act = Some(("timeline.setFrame", json!({ "frame": 0 })));
+                        }
+                        stop_play = true;
+                    }
                     if crate::icons::button(ui, "chevron-left", 22.0, false, tl!("Previous frame")).clicked() {
+                        stop_play = true;
                         act = Some(("timeline.previousFrame", json!({})));
                     }
                     ui.label(
@@ -96,12 +105,14 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
                         .monospace(),
                     );
                     if crate::icons::button(ui, "chevron-right", 22.0, false, tl!("Next frame")).clicked() {
+                        stop_play = true;
                         act = Some(("timeline.nextFrame", json!({})));
                     }
                     ui.separator();
                     ui.label(RichText::new(format!("{:.2}s", tl.time())).color(t.text_dim).monospace());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if crate::icons::button(ui, "trash", 20.0, false, tl!("Delete Timeline")).clicked() {
+                            stop_play = true;
                             act = Some(("timeline.delete", json!({})));
                         }
                         ui.label(RichText::new(format!("{:.0} fps", tl.fps)).color(t.text_dim));
@@ -113,6 +124,7 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
                     let mut frame = tl.current as f64;
                     let resp = ui.add(egui::Slider::new(&mut frame, 0.0..=(tl.duration - 1) as f64).integer().show_value(false).text("playhead"));
                     if resp.changed() {
+                        stop_play = true;
                         act = Some(("timeline.setFrame", json!({ "frame": frame as u64 })));
                     }
                 }
@@ -124,7 +136,9 @@ pub fn windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
         app.ui.timeline.open = false;
         app.ui.timeline.playing = false;
     }
-    if toggle_play {
+    if stop_play {
+        app.ui.timeline.playing = false;
+    } else if toggle_play {
         app.ui.timeline.playing = !app.ui.timeline.playing;
         app.ui.timeline.last_time = ctx.input(|i| i.time);
     }

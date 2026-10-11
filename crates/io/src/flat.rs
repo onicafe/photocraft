@@ -19,6 +19,25 @@ pub fn import_flat(name: &str, bytes: &[u8]) -> Result<ImportResult, IoError> {
     if codecs::detect(bytes) == Some(Format::Tiff) {
         return import_tiff_page(name, bytes, None);
     }
+    if codecs::detect(bytes) == Some(Format::Gif) {
+        let frames = codecs::decode_gif_frames(bytes, &codecs::DecodeOptions::default())?;
+        if frames.len() > 1 {
+            let mut r = image_to_document(name, &frames[0].image)?;
+            let delays: Vec<u32> = frames.iter().map(|f| f.delay_ms).collect();
+            let fps = gif_fps(&delays);
+            let n = frames.len();
+            r.document.layers.clear();
+            for (i, f) in frames.iter().enumerate() {
+                let mut s = image_surface(&f.image, ChannelLayout::Rgba, CSample::U8)?;
+                s.prune();
+                let mut layer = Layer::new(format!("Frame {}", i + 1), LayerContent::Raster(s));
+                layer.visible = i == 0;
+                r.document.layers.push(layer);
+            }
+            r.document.timeline = Some(photocraft_doc::Timeline::new(n, fps));
+            return Ok(r);
+        }
+    }
     let img = codecs::decode(bytes)?;
     let mut r = image_to_document(name, &img)?;
     if codecs::detect(bytes) == Some(Format::Tga) && img.layout() == ChannelLayout::Rgba {
@@ -36,6 +55,24 @@ pub fn import_flat(name: &str, bytes: &[u8]) -> Result<ImportResult, IoError> {
         };
     }
     Ok(r)
+}
+
+fn gif_fps(delays: &[u32]) -> f32 {
+    let clean = |d: u32| if d < 20 { 100 } else { d };
+    let mut counts: Vec<(u32, usize)> = Vec::new();
+    for d in delays.iter().copied().map(clean) {
+        match counts.iter_mut().find(|(k, _)| *k == d) {
+            Some((_, n)) => *n += 1,
+            None => counts.push((d, 1)),
+        }
+    }
+    counts
+        .iter()
+        .fold(None::<(u32, usize)>, |best, &(d, n)| match best {
+            Some((_, bn)) if bn >= n => best,
+            _ => Some((d, n)),
+        })
+        .map_or(10.0, |(d, _)| 1000.0 / d as f32)
 }
 
 /// Every frame of a GIF as a single-layer document, handed to `each` in order with its delay in

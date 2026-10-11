@@ -15,6 +15,17 @@ use crate::{EngineError, Result, Session};
 pub fn sync(doc: &mut Document) {
     let cur = doc.timeline.as_ref().map_or(0, |t| t.current);
     sync_layers(&mut doc.layers, cur);
+    let frame_count = doc.layers.iter().filter(|l| l.name.starts_with("Frame ")).count();
+    if !doc.layers.iter().any(|l| l.video.is_some()) && frame_count > 1 {
+        let target = cur.min(frame_count.saturating_sub(1));
+        let mut idx = 0;
+        for l in doc.layers.iter_mut() {
+            if l.name.starts_with("Frame ") {
+                l.visible = idx == target;
+                idx += 1;
+            }
+        }
+    }
 }
 
 fn sync_layers(layers: &mut [Layer], cur: usize) {
@@ -345,18 +356,32 @@ fn frames_to_layers(s: &mut Session, p: &Value) -> Result<Value> {
         .ok_or_else(|| EngineError::BadParams { cmd: "file.import.videoFramesToLayers".into(), msg: "need `path`".into() })?
         .to_string();
     let fmt = s.active().ok_or(EngineError::NoDocument)?.doc.pixel_format();
-    let frames = load_frames(&path, fmt)?.frames;
+    let Footage { frames, fps: footage_fps } = load_frames(&path, fmt)?;
+    let fps = footage_fps.unwrap_or(30.0);
     let n = frames.len();
     s.edit("Video Frames to Layers", |doc, active| {
+        if doc.timeline.is_none() && n > 1 {
+            doc.timeline = Some(Timeline::new(n, fps));
+        } else if let Some(t) = &mut doc.timeline {
+            t.duration = t.duration.max(n);
+            t.clamp();
+        }
         let mut above = *active;
+        let mut first_id = None;
         for (i, f) in frames.into_iter().enumerate() {
             let mut l = Layer::raster(format!("Frame {}", i + 1), fmt);
+            l.visible = i == 0;
             if let LayerContent::Raster(surf) = &mut l.content {
                 *surf = f;
             }
-            above = Some(doc.insert_above(above, l));
+            let id = doc.insert_above(above, l);
+            if first_id.is_none() {
+                first_id = Some(id);
+            }
+            above = Some(id);
         }
-        *active = above;
+        *active = first_id.or(above);
+        sync(doc);
         Ok(())
     })?;
     Ok(json!({"layers": n}))
